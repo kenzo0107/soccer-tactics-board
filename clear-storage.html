@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>LocalStorageクリア</title>
+</head>
+<body>
+  <h1>LocalStorageクリアツール</h1>
+  <button id="clear" style="padding: 20px; font-size: 18px; background: red; color: white; border: none; cursor: pointer;">
+    LocalStorageをクリア
+  </button>
+  <div id="result" style="margin-top: 20px; font-size: 16px;"></div>
+
+  <script>
+    document.getElementById('clear').addEventListener('click', () => {
+      localStorage.removeItem('soccer-tactics-board');
+      const result = document.getElementById('result');
+      const p1 = document.createElement('p');
+      p1.style.color = 'green';
+      p1.textContent = 'LocalStorageをクリアしました！';
+      const p2 = document.createElement('p');
+      const link = document.createElement('a');
+      link.href = 'index.html';
+      link.textContent = 'メインページに戻る';
+      p2.appendChild(link);
+      result.appendChild(p1);
+      result.appendChild(p2);
+    });
+  </script>
+</body>
+</html>

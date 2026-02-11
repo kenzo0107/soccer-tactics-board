@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デバッグテスト</title>
+</head>
+<body>
+  <h1>ボタンテスト</h1>
+  <button id="updateStep">ステップ更新</button>
+  <button id="deleteStep">ステップ削除</button>
+  <div id="log"></div>
+
+  <script>
+    const log = document.getElementById('log');
+
+    document.getElementById('updateStep').addEventListener('click', () => {
+      console.log('updateStepがクリックされました');
+      log.innerHTML += '<p>updateStepがクリックされました</p>';
+    });
+
+    document.getElementById('deleteStep').addEventListener('click', () => {
+      console.log('deleteStepがクリックされました');
+      log.innerHTML += '<p>deleteStepがクリックされました</p>';
+    });
+
+    console.log('イベントリスナー登録完了');
+    log.innerHTML += '<p>イベントリスナー登録完了</p>';
+  </script>
+</body>
+</html>

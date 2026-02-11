@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>動作テスト</title>
+</head>
+<body>
+  <h1>動作テスト</h1>
+  <button id="test">テストボタン</button>
+  <div id="result"></div>
+
+  <script type="module">
+    console.log('スクリプトが読み込まれました');
+
+    document.getElementById('test').addEventListener('click', () => {
+      console.log('ボタンがクリックされました');
+      document.getElementById('result').textContent = 'ボタンが動作しています！';
+    });
+
+    // モジュールのインポートテスト
+    import { State } from './js/state.js';
+    console.log('Stateモジュールがインポートされました');
+
+    const state = new State();
+    console.log('Stateインスタンスが作成されました');
+
+    state.addObject('player', 'red', 100, 100);
+    console.log('オブジェクトが追加されました:', state.objects);
+
+    const resultDiv = document.getElementById('result');
+    const p1 = document.createElement('p');
+    p1.textContent = 'State初期化成功';
+    const p2 = document.createElement('p');
+    p2.textContent = `オブジェクト数: ${state.objects.length}`;
+    const pre = document.createElement('pre');
+    pre.textContent = JSON.stringify(state.objects, null, 2);
+
+    resultDiv.appendChild(p1);
+    resultDiv.appendChild(p2);
+    resultDiv.appendChild(pre);
+  </script>
+</body>
+</html>
