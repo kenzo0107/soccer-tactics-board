@@ -66,6 +66,7 @@ class App {
 
     document.getElementById('saveStep').addEventListener('click', () => {
       this.state.saveStep();
+      this.state.setComment('');
       this.updateStepControls();
     });
 
@@ -174,10 +175,20 @@ class App {
       const name = nameInput.value;
 
       try {
-        this.animationManager.saveAnimation(name);
-        this.showNotification(`「${name}」を保存しました`, 'success');
-        nameInput.value = '';
-        this.renderSavedAnimations();
+        const result = this.animationManager.saveAnimation(name);
+
+        if (result.exists) {
+          if (confirm(`「${name}」は既に存在します。上書きしますか？`)) {
+            this.animationManager.updateAnimation(result.id, name);
+            this.showNotification(`「${name}」を上書き保存しました`, 'success');
+            nameInput.value = '';
+            this.renderSavedAnimations();
+          }
+        } else {
+          this.showNotification(`「${name}」を保存しました`, 'success');
+          nameInput.value = '';
+          this.renderSavedAnimations();
+        }
       } catch (error) {
         this.showNotification(error.message, 'error');
       }
@@ -211,6 +222,8 @@ class App {
 
     this.state.notifyListeners();
     this.updateStepControls();
+    this.renderSavedAnimations();
+    document.getElementById('animationNameInput').value = '';
     this.showNotification(`${preset.title}を読み込みました`, 'success');
   }
 
@@ -231,6 +244,9 @@ class App {
     animations.forEach((anim, index) => {
       const item = document.createElement('div');
       item.className = 'saved-animation-item';
+      if (anim.id === this.state.currentLoadedAnimationId) {
+        item.classList.add('active');
+      }
       item.draggable = true;
       item.dataset.id = anim.id;
       item.dataset.index = index;
@@ -336,9 +352,11 @@ class App {
         const item = e.target.closest('.saved-animation-item');
         const animId = item.dataset.id;
         try {
-          this.animationManager.loadAnimation(animId);
+          const animation = this.animationManager.loadAnimation(animId);
           this.updateStepControls();
-          this.showNotification('アニメーションを読み込みました', 'success');
+          this.renderSavedAnimations();
+          document.getElementById('animationNameInput').value = animation.name;
+          this.showNotification(`「${animation.name}」を読み込みました`, 'success');
           document.getElementById('menuOverlay').classList.remove('active');
           document.getElementById('sideMenu').classList.remove('active');
         } catch (error) {

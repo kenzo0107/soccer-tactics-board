@@ -11,6 +11,7 @@ export class State {
     this.currentComment = '';
     this.commentPosition = { x: 20, y: 40 };
     this.commentPointerPosition = { x: 40, y: 120 };
+    this.currentLoadedAnimationId = null;
   }
 
   addObject(type, color, x, y) {
@@ -182,6 +183,7 @@ export class State {
     this.currentComment = '';
     this.commentPosition = { x: 20, y: 40 };
     this.commentPointerPosition = { x: 40, y: 120 };
+    this.currentLoadedAnimationId = null;
     this.notifyListeners();
   }
 
@@ -197,6 +199,11 @@ export class State {
 
   setCommentPointerPosition(x, y) {
     this.commentPointerPosition = { x, y };
+    this.notifyListeners();
+  }
+
+  setCurrentLoadedAnimationId(id) {
+    this.currentLoadedAnimationId = id;
     this.notifyListeners();
   }
 

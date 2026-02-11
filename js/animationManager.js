@@ -22,6 +22,10 @@ export class AnimationManager {
     }
   }
 
+  findAnimationByName(name) {
+    return this.savedAnimations.find(a => a.name === name.trim());
+  }
+
   saveAnimation(name) {
     if (!name || name.trim() === '') {
       throw new Error('アニメーション名を入力してください');
@@ -29,6 +33,11 @@ export class AnimationManager {
 
     if (this.state.steps.length === 0) {
       throw new Error('保存するステップがありません');
+    }
+
+    const existingAnimation = this.findAnimationByName(name);
+    if (existingAnimation) {
+      return { exists: true, id: existingAnimation.id, name: existingAnimation.name };
     }
 
     const animation = {
@@ -40,6 +49,27 @@ export class AnimationManager {
 
     this.savedAnimations.unshift(animation);
     this.saveSavedAnimations();
+    this.state.setCurrentLoadedAnimationId(animation.id);
+
+    return { exists: false, animation };
+  }
+
+  updateAnimation(id, name) {
+    const animation = this.savedAnimations.find(a => a.id === id);
+    if (!animation) {
+      throw new Error('アニメーションが見つかりません');
+    }
+
+    if (this.state.steps.length === 0) {
+      throw new Error('保存するステップがありません');
+    }
+
+    animation.name = name.trim();
+    animation.timestamp = Date.now();
+    animation.steps = JSON.parse(JSON.stringify(this.state.steps));
+
+    this.saveSavedAnimations();
+    this.state.setCurrentLoadedAnimationId(animation.id);
 
     return animation;
   }
@@ -59,7 +89,10 @@ export class AnimationManager {
       this.state.objects = JSON.parse(JSON.stringify(this.state.steps[0].objects));
     }
 
+    this.state.setCurrentLoadedAnimationId(id);
     this.state.notifyListeners();
+
+    return animation;
   }
 
   deleteAnimation(id) {

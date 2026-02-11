@@ -397,14 +397,28 @@ export class Canvas {
 
     ctx.shadowBlur = 0;
 
-    const pointerRadius = 6;
-    ctx.fillStyle = '#e74c3c';
+    // 指し示す位置の三角形（吹き出しと同じ青色）
+    ctx.fillStyle = '#3498db';
     ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
+
+    const triangleSize = 8;
+    ctx.save();
+    ctx.translate(pointerX, pointerY);
+
+    // 吹き出しの方向を向くように回転
+    const angle = Math.atan2(y + boxHeight - pointerY, x + boxWidth / 2 - pointerX);
+    ctx.rotate(angle + Math.PI / 2);
+
     ctx.beginPath();
-    ctx.arc(pointerX, pointerY, pointerRadius, 0, Math.PI * 2);
+    ctx.moveTo(0, -triangleSize);
+    ctx.lineTo(-triangleSize * 0.6, 0);
+    ctx.lineTo(triangleSize * 0.6, 0);
+    ctx.closePath();
     ctx.fill();
     ctx.stroke();
+
+    ctx.restore();
   }
 
   getCommentBoxBounds() {
@@ -439,9 +453,9 @@ export class Canvas {
   isPointInCommentPointer(px, py) {
     const pointerX = this.state.commentPointerPosition.x;
     const pointerY = this.state.commentPointerPosition.y;
-    const pointerRadius = 6;
+    const triangleRadius = 8;
     const distance = Math.sqrt((px - pointerX) ** 2 + (py - pointerY) ** 2);
-    return distance <= pointerRadius;
+    return distance <= triangleRadius;
   }
 
   wrapText(text, maxWidth) {
