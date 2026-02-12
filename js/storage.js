@@ -5,72 +5,58 @@ export class Storage {
   }
 
   saveToLocalStorage() {
-    try {
-      const data = this.state.getData();
-      const json = JSON.stringify(data);
+    const data = this.state.getData();
+    const json = JSON.stringify(data);
 
-      if (json.length > 5 * 1024 * 1024) {
-        throw new Error('データサイズが大きすぎます（5MB制限）');
-      }
-
-      localStorage.setItem(this.storageKey, json);
-      return true;
-    } catch (error) {
-      console.error('LocalStorageへの保存に失敗しました:', error);
-      alert(`保存に失敗しました: ${error.message}`);
-      return false;
+    if (json.length > 5 * 1024 * 1024) {
+      throw new Error('Data size is too large (5MB limit)');
     }
+
+    localStorage.setItem(this.storageKey, json);
+    return true;
   }
 
   loadFromLocalStorage() {
     try {
       const json = localStorage.getItem(this.storageKey);
       if (!json) {
-        console.log('LocalStorageにデータがありません');
         return false;
       }
 
-      console.log('LocalStorageからデータを読み込み中...');
+      console.log('Loading data from LocalStorage...');
       const data = JSON.parse(json);
       this.state.loadData(data);
-      console.log('LocalStorageからの読み込み成功');
+      console.log('Successfully loaded data from LocalStorage');
       return true;
     } catch (error) {
-      console.error('LocalStorageからの読み込みに失敗しました:', error);
-      console.warn('破損したデータをクリアします');
+      console.error('Failed to load from LocalStorage:', error);
+      console.warn('Clearing corrupted data');
       localStorage.removeItem(this.storageKey);
-      alert(`保存データが破損していたためクリアしました: ${error.message}`);
       return false;
     }
   }
 
-  exportToJson() {
-    try {
-      const data = this.state.getData();
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
+  exportToJson(title) {
+    const data = this.state.getData(title);
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
 
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `tactics-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 
-      return true;
-    } catch (error) {
-      console.error('JSONエクスポートに失敗しました:', error);
-      alert(`エクスポートに失敗しました: ${error.message}`);
-      return false;
-    }
+    return true;
   }
 
   importFromJson(file) {
     return new Promise((resolve, reject) => {
       if (!file) {
-        reject(new Error('ファイルが選択されていません'));
+        reject(new Error('No file selected'));
         return;
       }
 
@@ -82,22 +68,20 @@ export class Storage {
           const data = JSON.parse(json);
 
           if (!data.version || !data.steps) {
-            throw new Error('無効なファイル形式です');
+            throw new Error('Invalid file format');
           }
 
           this.state.loadData(data);
           resolve(true);
         } catch (error) {
-          console.error('JSONインポートに失敗しました:', error);
-          alert(`インポートに失敗しました: ${error.message}`);
+          console.error('Failed to import JSON:', error);
           reject(error);
         }
       };
 
       reader.onerror = () => {
-        const error = new Error('ファイルの読み込みに失敗しました');
+        const error = new Error('Failed to read file');
         console.error(error);
-        alert(error.message);
         reject(error);
       };
 

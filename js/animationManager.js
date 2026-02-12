@@ -87,6 +87,8 @@ export class AnimationManager {
 
     if (this.state.steps.length > 0) {
       this.state.objects = JSON.parse(JSON.stringify(this.state.steps[0].objects));
+      this.state.comments = JSON.parse(JSON.stringify(this.state.steps[0].comments || []));
+      console.dir(this.state.comments);
     }
 
     this.state.setCurrentLoadedAnimationId(id);
