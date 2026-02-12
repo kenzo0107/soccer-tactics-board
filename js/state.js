@@ -8,21 +8,20 @@ export class State {
     this.nextPlayerId = { red: 1, blue: 1 };
     this.listeners = [];
     this.isTweening = false;
-    this.currentComment = '';
-    this.commentPosition = { x: 20, y: 40 };
-    this.commentPointerPosition = { x: 40, y: 120 };
+    this.comments = [];
     this.currentLoadedAnimationId = null;
   }
 
   addObject(type, color, x, y) {
-    let id, radius, number, direction;
+    let id, radius, number, direction, name;
 
     if (type === 'player') {
       number = this.nextPlayerId[color];
       this.nextPlayerId[color]++;
       id = `player-${color}-${number}`;
-      radius = 20;
+      radius = 16; // プレイヤーの半径
       direction = 0;
+      name = ''; // 初期値は空文字
     } else if (type === 'ball') {
       id = `ball-${Date.now()}`;
       radius = 10;
@@ -31,7 +30,7 @@ export class State {
       radius = 8;
     }
 
-    const obj = { id, type, color, x, y, radius, number, direction };
+    const obj = { id, type, color, x, y, radius, number, direction, name };
     this.objects.push(obj);
     this.notifyListeners();
     return obj;
@@ -39,9 +38,11 @@ export class State {
 
   removeObject(id) {
     this.objects = this.objects.filter(obj => obj.id !== id);
+    this.comments = this.comments.filter(comment => comment.id !== id);
     if (this.selectedObject?.id === id) {
       this.selectedObject = null;
     }
+    this.selectedObjects = this.selectedObjects.filter(obj => obj.id !== id);
     this.notifyListeners();
   }
 
@@ -63,14 +64,62 @@ export class State {
     }
   }
 
+  setObjectDirection(id, direction) {
+    const obj = this.objects.find(o => o.id === id);
+    if (obj && obj.type === 'player') {
+      obj.direction = ((direction % 360) + 360) % 360;
+      this.notifyListeners();
+    }
+  }
+
+  updatePlayerName(id, name) {
+    const obj = this.objects.find(o => o.id === id);
+    if (obj && obj.type === 'player') {
+      obj.name = name;
+      this.notifyListeners();
+    }
+  }
+
+  addComment(text, x = 20, y = 40) {
+    const id = `comment-${Date.now()}`;
+    const comment = {
+      id,
+      text,
+      position: { x, y }
+    };
+    this.comments.push(comment);
+    this.notifyListeners();
+    return comment;
+  }
+
+  updateComment(id, text) {
+    const comment = this.comments.find(c => c.id === id);
+    if (comment) {
+      comment.text = text;
+      this.notifyListeners();
+    }
+  }
+
+  updateCommentPosition(id, x, y) {
+    const comment = this.comments.find(c => c.id === id);
+    if (comment) {
+      comment.position = { x, y };
+      this.notifyListeners();
+    }
+  }
+
   selectObject(id) {
-    this.selectedObject = this.objects.find(obj => obj.id === id);
+    this.selectedObject = this.objects.find(obj => obj.id === id) ||
+                           this.comments.find(comment => comment.id === id);
     this.selectedObjects = [this.selectedObject];
     this.notifyListeners();
   }
 
   selectMultipleObjects(ids) {
-    this.selectedObjects = this.objects.filter(obj => ids.includes(obj.id));
+    this.selectedObjects = [
+      ...this.objects.filter(obj => ids.includes(obj.id)),
+      ...this.comments.filter(comment => ids.includes(comment.id))
+    ];
     this.selectedObject = this.selectedObjects.length > 0 ? this.selectedObjects[0] : null;
     this.notifyListeners();
   }
@@ -97,9 +146,7 @@ export class State {
       stepId: this.steps.length,
       timestamp: Date.now(),
       objects: JSON.parse(JSON.stringify(this.objects)),
-      comment: this.currentComment,
-      commentPosition: { ...this.commentPosition },
-      commentPointerPosition: { ...this.commentPointerPosition }
+      comments: JSON.parse(JSON.stringify(this.comments))
     };
     this.steps.push(step);
     this.currentStepIndex = this.steps.length - 1;
@@ -112,9 +159,7 @@ export class State {
         stepId: this.steps[index].stepId,
         timestamp: Date.now(),
         objects: JSON.parse(JSON.stringify(this.objects)),
-        comment: this.currentComment,
-        commentPosition: { ...this.commentPosition },
-        commentPointerPosition: { ...this.commentPointerPosition }
+        comments: JSON.parse(JSON.stringify(this.comments))
       };
       this.notifyListeners();
       return true;
@@ -150,17 +195,13 @@ export class State {
           stepId: this.steps[this.currentStepIndex].stepId,
           timestamp: this.steps[this.currentStepIndex].timestamp,
           objects: JSON.parse(JSON.stringify(this.objects)),
-          comment: this.currentComment,
-          commentPosition: { ...this.commentPosition },
-          commentPointerPosition: { ...this.commentPointerPosition }
+          comments: JSON.parse(JSON.stringify(this.comments))
         };
       }
 
       this.currentStepIndex = index;
       this.objects = JSON.parse(JSON.stringify(this.steps[index].objects));
-      this.currentComment = this.steps[index].comment || '';
-      this.commentPosition = this.steps[index].commentPosition || { x: 20, y: 40 };
-      this.commentPointerPosition = this.steps[index].commentPointerPosition || { x: 40, y: 120 };
+      this.comments = JSON.parse(JSON.stringify(this.steps[index].comments || []));
       this.deselectObject();
       this.notifyListeners();
     }
@@ -180,25 +221,8 @@ export class State {
     this.selectedObjects = [];
     this.nextPlayerId = { red: 1, blue: 1 };
     this.isTweening = false;
-    this.currentComment = '';
-    this.commentPosition = { x: 20, y: 40 };
-    this.commentPointerPosition = { x: 40, y: 120 };
+    this.comments = [];
     this.currentLoadedAnimationId = null;
-    this.notifyListeners();
-  }
-
-  setComment(comment) {
-    this.currentComment = comment;
-    this.notifyListeners();
-  }
-
-  setCommentPosition(x, y) {
-    this.commentPosition = { x, y };
-    this.notifyListeners();
-  }
-
-  setCommentPointerPosition(x, y) {
-    this.commentPointerPosition = { x, y };
     this.notifyListeners();
   }
 
@@ -207,10 +231,10 @@ export class State {
     this.notifyListeners();
   }
 
-  getData() {
+  getData(title = 'サッカー作戦盤') {
     return {
       version: '1.0.0',
-      title: 'サッカー作戦盤',
+      title,
       description: '',
       fieldDimensions: { width: 400, height: 600 },
       createdAt: new Date().toISOString(),
@@ -224,11 +248,28 @@ export class State {
       throw new Error('Invalid data format');
     }
     this.steps = data.steps;
-    this.currentStepIndex = Math.max(0, this.steps.length - 1);
+    this.currentStepIndex = 0;
     if (this.steps.length > 0) {
-      this.objects = JSON.parse(JSON.stringify(this.steps[this.currentStepIndex].objects));
+      this.objects = JSON.parse(JSON.stringify(this.steps[0].objects));
+      this.comments = JSON.parse(JSON.stringify(this.steps[0].comments || []));
     }
+    this._updateNextPlayerIdFromSteps();
     this.notifyListeners();
+  }
+
+  _updateNextPlayerIdFromSteps() {
+    const maxNumbers = { red: 0, blue: 0 };
+    for (const step of this.steps) {
+      for (const obj of step.objects) {
+        if (obj.type === 'player' && obj.color in maxNumbers) {
+          maxNumbers[obj.color] = Math.max(maxNumbers[obj.color], obj.number);
+        }
+      }
+    }
+    this.nextPlayerId = {
+      red: maxNumbers.red + 1,
+      blue: maxNumbers.blue + 1
+    };
   }
 
   addListener(callback) {

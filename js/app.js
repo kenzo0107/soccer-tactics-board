@@ -3,8 +3,9 @@ import { Canvas } from './canvas.js';
 import { DragDrop } from './dragdrop.js';
 import { Animation } from './animation.js';
 import { Storage } from './storage.js';
-import { PRESETS } from './presets.js';
+import { PresetManager } from './presets.js';
 import { AnimationManager } from './animationManager.js';
+import { GifRecorder } from './gifRecorder.js';
 
 class App {
   constructor() {
@@ -16,63 +17,219 @@ class App {
       this.animation = new Animation(this.state, this.canvas);
       this.storage = new Storage(this.state);
       this.animationManager = new AnimationManager(this.state);
+      this.presetManager = new PresetManager();
+      this.gifRecorder = new GifRecorder(this.state, this.canvas, this.animation);
+      this.rotationControlEnabled = false;
+      this.ballImage = new Image();
+      this.ballImage.src = 'favicon.ico';
+      this.ballImage.onload = () => {
+        this.drawButtonIcons();
+        this.canvas.setBallImage(this.ballImage);
+        this.canvas.draw();
+      };
       this.setupEventListeners();
       this.setupMenuListeners();
+      this.setupRotationControl();
+      this.setupDoubleClickHandler();
       this.state.addListener(() => this.onStateChange());
       this.storage.loadFromLocalStorage();
-      this.canvas.draw();
       this.updateStepControls();
+      this.updateDeleteButtonVisibility();
       this.renderSavedAnimations();
+      this.initializePresets();
     } catch (error) {
       console.error('App初期化エラー:', error);
       alert(`初期化エラー: ${error.message}\nLocalStorageをクリアしてページを再読み込みしてください。`);
     }
   }
 
+  drawButtonIcons() {
+    // 赤選手アイコン
+    const redPlayerCanvas = document.querySelector('#addRedPlayer .btn-canvas');
+    const redPlayerCtx = redPlayerCanvas.getContext('2d');
+    this.drawPlayerIcon(redPlayerCtx, 28, 28, '#e74c3c', 12);
+
+    // 青選手アイコン
+    const bluePlayerCanvas = document.querySelector('#addBluePlayer .btn-canvas');
+    const bluePlayerCtx = bluePlayerCanvas.getContext('2d');
+    this.drawPlayerIcon(bluePlayerCtx, 28, 28, '#3498db', 12);
+
+    // ボールアイコン
+    const ballCanvas = document.querySelector('#addBall .btn-canvas');
+    const ballCtx = ballCanvas.getContext('2d');
+    this.drawBallIcon(ballCtx, 28, 28, 13);
+
+    // マーカーアイコン
+    const markerCanvas = document.querySelector('#addMarker .btn-canvas');
+    const markerCtx = markerCanvas.getContext('2d');
+    this.drawMarkerIcon(markerCtx, 28, 28, 13);
+  }
+
+  drawPlayerIcon(ctx, x, y, color, radius) {
+    // 円を描画
+    ctx.fillStyle = color;
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 方向を示す三角形
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(0);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1.5;
+    const triangleSize = 6;
+    const offset = radius + 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -offset - triangleSize);
+    ctx.lineTo(-triangleSize * 0.6, -offset);
+    ctx.lineTo(triangleSize * 0.6, -offset);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawBallIcon(ctx, x, y, radius) {
+    if (this.ballImage && this.ballImage.complete) {
+      const size = radius * 2;
+      ctx.drawImage(this.ballImage, x - radius, y - radius, size, size);
+    } else {
+      // 画像が読み込まれていない場合のフォールバック
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  drawMarkerIcon(ctx, x, y, radius) {
+    ctx.fillStyle = '#9b59b6';
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  async initializePresets() {
+    try {
+      await this.presetManager.loadPresets();
+      this.renderPresets();
+    } catch (error) {
+      console.error('プリセット初期化エラー:', error);
+      const presetList = document.querySelector('.preset-list');
+      if (presetList) {
+        const emptyMsg = document.createElement('p');
+        emptyMsg.className = 'empty-message';
+        emptyMsg.textContent = 'プリセットの読み込みに失敗しました';
+        presetList.replaceChildren(emptyMsg);
+      }
+    }
+  }
+
+  renderPresets() {
+    const presetList = document.querySelector('.preset-list');
+    const presets = this.presetManager.getPresets();
+
+    if (!presetList) return;
+
+    if (presets.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.className = 'empty-message';
+      emptyMsg.textContent = 'presets not found';
+      presetList.replaceChildren(emptyMsg);
+      return;
+    }
+
+    presetList.replaceChildren();
+    presets.forEach(preset => {
+      const item = document.createElement('div');
+      item.className = 'preset-item';
+      item.dataset.preset = preset.id;
+
+      const info = document.createElement('div');
+      info.className = 'preset-info';
+
+      const title = document.createElement('div');
+      title.className = 'preset-title';
+      title.textContent = preset.title;
+
+      const description = document.createElement('div');
+      description.className = 'preset-description';
+
+      info.appendChild(title);
+      info.appendChild(description);
+      item.appendChild(info);
+      presetList.appendChild(item);
+    });
+
+    this.setupPresetListeners();
+  }
+
+  setupPresetListeners() {
+    document.querySelectorAll('.preset-item').forEach(item => {
+      item.addEventListener('click', () => {
+        this.loadPreset(item.dataset.preset);
+        this.closeMenu();
+      });
+    });
+  }
+
+  closeMenu() {
+    document.getElementById('menuOverlay').classList.remove('active');
+    document.getElementById('sideMenu').classList.remove('active');
+  }
+
   setupEventListeners() {
     document.getElementById('addRedPlayer').addEventListener('click', () => {
-      this.state.addObject('player', 'red', 200, 530);
+      this.state.addObject('player', 'red', 170, 451);
     });
 
     document.getElementById('addBluePlayer').addEventListener('click', () => {
-      this.state.addObject('player', 'blue', 200, 130);
+      this.state.addObject('player', 'blue', 170, 111);
     });
 
     document.getElementById('addBall').addEventListener('click', () => {
-      this.state.addObject('ball', 'orange', 200, 330);
+      this.state.addObject('ball', 'orange', 170, 281);
     });
 
     document.getElementById('addMarker').addEventListener('click', () => {
-      this.state.addObject('marker', 'purple', 200, 330);
+      this.state.addObject('marker', 'purple', 170, 281);
     });
 
     document.getElementById('addComment').addEventListener('click', () => {
-      const text = prompt('吹き出しのテキストを入力してください:', this.state.currentComment || '');
-      if (text !== null) {
-        this.state.setComment(text);
-        if (!this.state.commentPosition || (this.state.commentPosition.x === 20 && this.state.commentPosition.y === 40)) {
-          this.state.setCommentPosition(20, 40);
-          this.state.setCommentPointerPosition(200, 330);
-        }
+      const text = prompt('Enter comment text:');
+      if (text !== null && text.trim() !== '') {
+        this.state.addComment(text, 20, 40, 170, 281);
         this.canvas.draw();
       }
     });
 
     document.getElementById('deleteSelected').addEventListener('click', () => {
-      if (this.state.selectedObject) {
-        this.state.removeObject(this.state.selectedObject.id);
+      if (this.state.selectedObjects && this.state.selectedObjects.length > 0) {
+        this.state.selectedObjects.forEach(obj => {
+          this.state.removeObject(obj.id);
+        });
       }
     });
 
     document.getElementById('saveStep').addEventListener('click', () => {
       this.state.saveStep();
-      this.state.setComment('');
       this.updateStepControls();
     });
 
     document.getElementById('updateStep').addEventListener('click', () => {
       if (this.state.isTweening) {
-        this.showNotification('アニメーション中は更新できません', 'error');
+        this.showNotification('Cannot update while animation is playing', 'error');
         return;
       }
 
@@ -81,9 +238,9 @@ class App {
         this.state.loadStep(this.state.currentStepIndex);
         this.updateStepControls();
         this.canvas.draw();
-        this.showNotification(`ステップ ${this.state.currentStepIndex + 1} を更新しました`, 'success');
+        this.showNotification(`Updated step ${this.state.currentStepIndex + 1}`, 'success');
       } else {
-        this.showNotification('更新するステップがありません', 'error');
+        this.showNotification('No steps to update', 'error');
       }
     });
 
@@ -92,38 +249,40 @@ class App {
         const stepNum = this.state.currentStepIndex + 1;
         this.state.deleteStep(this.state.currentStepIndex);
         this.updateStepControls();
-        this.showNotification(`ステップ ${stepNum} を削除しました`, 'success');
+        this.showNotification(`Deleted step ${stepNum}`, 'success');
       } else {
-        this.showNotification('削除するステップがありません', 'error');
+        this.showNotification('No steps to delete', 'error');
       }
     });
 
     document.getElementById('playPause').addEventListener('click', () => {
       const isPlaying = this.animation.toggle();
-      document.getElementById('playPause').textContent = isPlaying ? '⏸ 停止' : '▶ 再生';
+      document.getElementById('playPause').textContent = isPlaying ? '⏸' : '▶';
     });
 
-    document.getElementById('prevStep').addEventListener('click', () => {
-      this.animation.prevStep();
-    });
-
-    document.getElementById('nextStep').addEventListener('click', () => {
-      this.animation.nextStep();
-    });
-
+    let timer;
+    const delay = 500; // 500ms (milliseconds)
     document.getElementById('stepSlider').addEventListener('input', (e) => {
-      this.animation.goToStep(parseInt(e.target.value));
-    });
+      clearTimeout(timer);
 
-    document.getElementById('saveLocal').addEventListener('click', () => {
-      if (this.storage.saveToLocalStorage()) {
-        alert('LocalStorageに保存しました');
-      }
+      timer = setTimeout(() => {
+        this.animation.goToStep(parseInt(e.target.value));
+        document.getElementById('playPause').textContent = '▶';
+      }, delay);
+
+
     });
 
     document.getElementById('exportJson').addEventListener('click', () => {
-      if (this.storage.exportToJson()) {
-        alert('JSONファイルをダウンロードしました');
+      const title = prompt('Enter title:', 'Soccer Tactics Board');
+      if (title === null) return;
+
+      try {
+        this.storage.exportToJson(title.trim() || 'Soccer Tactics Board');
+        this.showNotification('Downloaded JSON file', 'success');
+      } catch (error) {
+        console.error('Export error:', error);
+        this.showNotification(`Export failed: ${error.message}`, 'error');
       }
     });
 
@@ -133,19 +292,56 @@ class App {
         try {
           await this.storage.importFromJson(file);
           this.updateStepControls();
-          alert('JSONファイルを読み込みました');
+          this.showNotification('Loaded JSON file', 'success');
         } catch (error) {
-          console.error(error);
+          console.error('Import error:', error);
+          this.showNotification(`Import failed: ${error.message}`, 'error');
         }
         e.target.value = '';
       }
     });
 
+    document.getElementById('exportGif').addEventListener('click', async () => {
+      if (this.gifRecorder.isRecording()) {
+        this.showNotification('Generating GIF...', 'info');
+        return;
+      }
+
+      if (this.animation.isPlaying()) {
+        this.animation.stop();
+        document.getElementById('playPause').textContent = '\u25B6';
+      }
+
+      const overlay = document.getElementById('exportOverlay');
+      const allButtons = document.querySelectorAll('button, .btn-file-label');
+      try {
+        overlay.classList.add('active');
+        allButtons.forEach(btn => {
+          btn.disabled = true;
+          btn.style.pointerEvents = 'none';
+        });
+
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await this.gifRecorder.record();
+
+        this.showNotification('Downloaded GIF', 'success');
+      } catch (error) {
+        console.error('GIF export error:', error);
+        this.showNotification(error.message, 'error');
+      } finally {
+        overlay.classList.remove('active');
+        allButtons.forEach(btn => {
+          btn.disabled = false;
+          btn.style.pointerEvents = '';
+        });
+      }
+    });
+
     document.getElementById('clearAll').addEventListener('click', () => {
-      if (confirm('すべてのデータをクリアしますか？この操作は取り消せません。')) {
+      if (confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
         localStorage.removeItem('soccer-tactics-board');
         this.state.reset();
-        alert('すべてのデータをクリアしました');
+        this.showNotification('Cleared all data', 'success');
       }
     });
   }
@@ -171,45 +367,36 @@ class App {
     menuOverlay.addEventListener('click', closeMenu);
 
     document.getElementById('saveAnimation').addEventListener('click', () => {
-      const nameInput = document.getElementById('animationNameInput');
-      const name = nameInput.value;
+      const name = prompt('Enter animation name:');
+      if (name === null) return;
 
       try {
         const result = this.animationManager.saveAnimation(name);
 
         if (result.exists) {
-          if (confirm(`「${name}」は既に存在します。上書きしますか？`)) {
+          if (confirm(`"${name}" already exists. Overwrite?`)) {
             this.animationManager.updateAnimation(result.id, name);
-            this.showNotification(`「${name}」を上書き保存しました`, 'success');
-            nameInput.value = '';
+            this.showNotification(`Overwrote "${name}"`, 'success');
             this.renderSavedAnimations();
           }
         } else {
-          this.showNotification(`「${name}」を保存しました`, 'success');
-          nameInput.value = '';
+          this.showNotification(`Saved "${name}"`, 'success');
           this.renderSavedAnimations();
         }
       } catch (error) {
         this.showNotification(error.message, 'error');
       }
     });
-
-    document.querySelectorAll('.load-preset-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const presetItem = e.target.closest('.preset-item');
-        const presetId = presetItem.dataset.preset;
-        this.loadPreset(presetId);
-        closeMenu();
-      });
-    });
   }
 
   loadPreset(presetId) {
-    const preset = PRESETS[presetId];
-    if (!preset) {
-      this.showNotification('プリセットが見つかりません', 'error');
+    const presetData = this.presetManager.getPreset(presetId);
+    if (!presetData) {
+      this.showNotification('No presets found', 'error');
       return;
     }
+
+    const preset = presetData.data;
 
     this.state.reset();
     this.state.steps = JSON.parse(JSON.stringify(preset.steps));
@@ -218,25 +405,24 @@ class App {
 
     if (this.state.steps.length > 0) {
       this.state.objects = JSON.parse(JSON.stringify(this.state.steps[0].objects));
+      this.state.comments = JSON.parse(JSON.stringify(this.state.steps[0].comments || []));
     }
 
     this.state.notifyListeners();
     this.updateStepControls();
     this.renderSavedAnimations();
-    document.getElementById('animationNameInput').value = '';
-    this.showNotification(`${preset.title}を読み込みました`, 'success');
+    this.showNotification(`Loaded ${presetData.title}`, 'success');
   }
 
   renderSavedAnimations() {
     const listContainer = document.getElementById('savedAnimationsList');
     const animations = this.animationManager.getSavedAnimations();
 
-    listContainer.innerHTML = '';
+    listContainer.replaceChildren();
 
     if (animations.length === 0) {
       const emptyMsg = document.createElement('p');
       emptyMsg.className = 'empty-message';
-      emptyMsg.textContent = '保存されたアニメーションはありません';
       listContainer.appendChild(emptyMsg);
       return;
     }
@@ -262,23 +448,18 @@ class App {
       name.className = 'saved-animation-name';
       name.textContent = anim.name;
 
-      const meta = document.createElement('div');
-      meta.className = 'saved-animation-meta';
-      meta.textContent = `${anim.steps.length} ステップ`;
-
       info.appendChild(name);
-      info.appendChild(meta);
 
       const actions = document.createElement('div');
       actions.className = 'saved-animation-actions';
 
       const loadBtn = document.createElement('button');
-      loadBtn.className = 'btn btn-sm btn-primary load-animation-btn';
-      loadBtn.textContent = '読込';
+      loadBtn.className = 'btn btn-sm btn-ghost load-animation-btn';
+      loadBtn.innerHTML = '<i class="fa-solid fa-file-import"></i>';
 
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn btn-sm btn-delete delete-animation-btn';
-      deleteBtn.textContent = '削除';
+      deleteBtn.className = 'btn btn-sm btn-delete-selected delete-animation-btn';
+      deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
 
       actions.appendChild(loadBtn);
       actions.appendChild(deleteBtn);
@@ -355,8 +536,7 @@ class App {
           const animation = this.animationManager.loadAnimation(animId);
           this.updateStepControls();
           this.renderSavedAnimations();
-          document.getElementById('animationNameInput').value = animation.name;
-          this.showNotification(`「${animation.name}」を読み込みました`, 'success');
+          this.showNotification(`Loaded "${animation.name}"`, 'success');
           document.getElementById('menuOverlay').classList.remove('active');
           document.getElementById('sideMenu').classList.remove('active');
         } catch (error) {
@@ -371,11 +551,11 @@ class App {
         const animId = item.dataset.id;
         const animName = item.querySelector('.saved-animation-name').textContent;
 
-        if (confirm(`「${animName}」を削除しますか？`)) {
+        if (confirm(`Delete "${animName}"?`)) {
           try {
             this.animationManager.deleteAnimation(animId);
             this.renderSavedAnimations();
-            this.showNotification('削除しました', 'success');
+            this.showNotification('Deleted', 'success');
           } catch (error) {
             this.showNotification(error.message, 'error');
           }
@@ -387,13 +567,28 @@ class App {
   onStateChange() {
     this.canvas.draw();
     this.updateStepControls();
+    this.updateDeleteButtonVisibility();
+
+    const selectedPlayer = this.getSelectedPlayer();
+    if (selectedPlayer && this.rotationControlEnabled) {
+      this.showRotationControl(selectedPlayer);
+    } else {
+      this.hideRotationControl();
+      this.rotationControlEnabled = false;
+    }
 
     if (this.animation.isPlaying() && !this.state.isTweening) {
       if (this.state.currentStepIndex >= this.state.steps.length - 1) {
         this.animation.stop();
-        document.getElementById('playPause').textContent = '▶ 再生';
+        document.getElementById('playPause').textContent = '▶';
       }
     }
+  }
+
+  updateDeleteButtonVisibility() {
+    const deleteBtn = document.getElementById('deleteSelected');
+    const hasSelection = this.state.selectedObjects && this.state.selectedObjects.length > 0;
+    deleteBtn.style.display = hasSelection ? 'block' : 'none';
   }
 
   updateStepControls() {
@@ -405,10 +600,8 @@ class App {
     slider.value = stepCount > 0 ? currentIndex : 0;
 
     const stepInfo = document.getElementById('stepInfo');
-    stepInfo.textContent = `ステップ ${stepCount > 0 ? currentIndex + 1 : 0}/${stepCount}`;
+    stepInfo.textContent = `${stepCount > 0 ? currentIndex + 1 : 0}/${stepCount}`;
 
-    document.getElementById('prevStep').disabled = currentIndex === 0;
-    document.getElementById('nextStep').disabled = currentIndex >= stepCount - 1;
     document.getElementById('playPause').disabled = stepCount === 0;
   }
 
@@ -425,8 +618,127 @@ class App {
       setTimeout(() => notification.remove(), 300);
     }, 2000);
   }
+
+  setupRotationControl() {
+    this.rotationControl = document.getElementById('rotationControl');
+    this.rotationSlider = document.getElementById('rotationSlider');
+    this.rotationAngleValue = document.getElementById('rotationAngleValue');
+    this.rotationPreviewCanvas = document.getElementById('rotationPreviewCanvas');
+    this.rotationPreviewCtx = this.rotationPreviewCanvas.getContext('2d');
+    this.closeRotationControl = document.getElementById('closeRotationControl');
+    this.playerNameInput = document.getElementById('playerNameInput');
+
+    this.rotationSlider.addEventListener('input', (e) => {
+      const angle = parseInt(e.target.value);
+      this.updateRotation(angle);
+    });
+
+    this.playerNameInput.addEventListener('input', (e) => {
+      const name = e.target.value;
+      this.updatePlayerName(name);
+    });
+
+    this.closeRotationControl.addEventListener('click', () => {
+      this.hideRotationControl();
+      this.rotationControlEnabled = false;
+    });
+  }
+
+  setupDoubleClickHandler() {
+    this.dragDrop.setDoubleClickCallback((player) => {
+      this.state.selectObject(player.id);
+      this.rotationControlEnabled = true;
+      this.showRotationControl(player);
+    });
+  }
+
+  updateRotation(angle) {
+    const selectedPlayer = this.getSelectedPlayer();
+    if (selectedPlayer) {
+      this.state.setObjectDirection(selectedPlayer.id, angle);
+      this.rotationAngleValue.textContent = angle;
+      this.drawRotationPreview(selectedPlayer.color, angle);
+    }
+  }
+
+  updatePlayerName(name) {
+    const selectedPlayer = this.getSelectedPlayer();
+    if (selectedPlayer) {
+      this.state.updatePlayerName(selectedPlayer.id, name);
+    }
+  }
+
+  getSelectedPlayer() {
+    if (this.state.selectedObjects.length === 1) {
+      const obj = this.state.selectedObjects[0];
+      if (obj.type === 'player') {
+        return obj;
+      }
+    }
+    return null;
+  }
+
+  showRotationControl(player) {
+    const angle = player.direction || 0;
+    this.rotationSlider.value = angle;
+    this.rotationAngleValue.textContent = angle;
+    this.playerNameInput.value = player.name || '';
+    this.drawRotationPreview(player.color, angle);
+    this.rotationControl.classList.add('visible');
+  }
+
+  hideRotationControl() {
+    this.rotationControl.classList.remove('visible');
+  }
+
+  drawRotationPreview(color, angle) {
+    const canvas = this.rotationPreviewCanvas;
+    const ctx = this.rotationPreviewCtx;
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const colorCode = color === 'red' ? '#e74c3c' : '#3498db';
+    const radius = 18;
+
+    ctx.fillStyle = colorCode;
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(angle * Math.PI / 180);
+
+    ctx.fillStyle = colorCode;
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+
+    const triangleSize = 10;
+    const offset = radius + 4;
+
+    ctx.beginPath();
+    ctx.moveTo(0, -offset - triangleSize);
+    ctx.lineTo(-triangleSize * 0.6, -offset);
+    ctx.lineTo(triangleSize * 0.6, -offset);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   new App();
 });
+
+function sleep(seconds) {
+  return new Promise(resolve => {
+    setTimeout(resolve, seconds * 1000);
+  });
+}

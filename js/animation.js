@@ -4,8 +4,8 @@ export class Animation {
     this.canvas = canvas;
     this.playing = false;
     this.animationFrameId = null;
-    this.tweenDuration = 1200;
-    this.pauseDuration = 300;
+    this.tweenDuration = 1500; // msec
+    this.pauseDuration = 700;
 
     this.tweening = false;
     this.tweenStartTime = null;
@@ -16,11 +16,17 @@ export class Animation {
 
   play() {
     if (this.state.steps.length === 0) return;
+    if (this.tweening) return;
 
     this.playing = true;
 
     if (this.state.currentStepIndex >= this.state.steps.length - 1) {
       this.state.currentStepIndex = -1;
+    } else if (this.state.currentStepIndex >= 0) {
+      // 現在のステップのデータを正しく読み込む（スライダー移動後の状態を確実に同期）
+      const currentStep = this.state.steps[this.state.currentStepIndex];
+      this.state.objects = JSON.parse(JSON.stringify(currentStep.objects));
+      this.state.comments = JSON.parse(JSON.stringify(currentStep.comments || []));
     }
 
     this.startTweenToNextStep();
@@ -65,9 +71,7 @@ export class Animation {
         stepId: this.state.steps[this.state.currentStepIndex].stepId,
         timestamp: this.state.steps[this.state.currentStepIndex].timestamp,
         objects: JSON.parse(JSON.stringify(this.state.objects)),
-        comment: this.state.currentComment,
-        commentPosition: { ...this.state.commentPosition },
-        commentPointerPosition: { ...this.state.commentPointerPosition }
+        comments: JSON.parse(JSON.stringify(this.state.comments))
       };
     }
 
@@ -104,9 +108,7 @@ export class Animation {
 
       const currentStep = this.state.steps[this.state.currentStepIndex];
       if (currentStep) {
-        this.state.currentComment = currentStep.comment || '';
-        this.state.commentPosition = currentStep.commentPosition || { x: 20, y: 40 };
-        this.state.commentPointerPosition = currentStep.commentPointerPosition || { x: 40, y: 120 };
+        this.state.comments = JSON.parse(JSON.stringify(currentStep.comments || []));
       }
 
       this.state.notifyListeners();
@@ -182,15 +184,14 @@ export class Animation {
   }
 
   nextStep() {
+    if (this.tweening) return;
     if (this.state.currentStepIndex < this.state.steps.length - 1) {
       if (this.state.currentStepIndex >= 0) {
         this.state.steps[this.state.currentStepIndex] = {
           stepId: this.state.steps[this.state.currentStepIndex].stepId,
           timestamp: this.state.steps[this.state.currentStepIndex].timestamp,
           objects: JSON.parse(JSON.stringify(this.state.objects)),
-          comment: this.state.currentComment,
-          commentPosition: { ...this.state.commentPosition },
-          commentPointerPosition: { ...this.state.commentPointerPosition }
+          comments: JSON.parse(JSON.stringify(this.state.comments))
         };
       }
 
@@ -205,15 +206,14 @@ export class Animation {
   }
 
   prevStep() {
+    if (this.tweening) return;
     if (this.state.currentStepIndex > 0) {
       if (this.state.currentStepIndex >= 0) {
         this.state.steps[this.state.currentStepIndex] = {
           stepId: this.state.steps[this.state.currentStepIndex].stepId,
           timestamp: this.state.steps[this.state.currentStepIndex].timestamp,
           objects: JSON.parse(JSON.stringify(this.state.objects)),
-          comment: this.state.currentComment,
-          commentPosition: { ...this.state.commentPosition },
-          commentPointerPosition: { ...this.state.commentPointerPosition }
+          comments: JSON.parse(JSON.stringify(this.state.comments))
         };
       }
 
@@ -229,21 +229,33 @@ export class Animation {
 
   goToStep(index) {
     if (index >= 0 && index < this.state.steps.length && index !== this.state.currentStepIndex) {
-      if (this.state.currentStepIndex >= 0 && this.state.currentStepIndex < this.state.steps.length) {
+      // 再生中・トゥイーン中の場合は停止してから移動
+      const wasTweening = this.tweening;
+      if (this.playing || this.tweening) {
+        this.pause();
+      }
+
+      // トゥイーン中だった場合、state.objectsが中間補間状態のため
+      // ステップデータとして保存せず、保存済みデータから遷移元を取得する
+      if (!wasTweening && this.state.currentStepIndex >= 0 && this.state.currentStepIndex < this.state.steps.length) {
         this.state.steps[this.state.currentStepIndex] = {
           stepId: this.state.steps[this.state.currentStepIndex].stepId,
           timestamp: this.state.steps[this.state.currentStepIndex].timestamp,
           objects: JSON.parse(JSON.stringify(this.state.objects)),
-          comment: this.state.currentComment,
-          commentPosition: { ...this.state.commentPosition },
-          commentPointerPosition: { ...this.state.commentPointerPosition }
+          comments: JSON.parse(JSON.stringify(this.state.comments))
         };
       }
+
+      // 遷移元は保存済みステップデータを使用する（中間状態の混入を防ぐ）
+      const fromIndex = this.state.currentStepIndex;
+      const fromObjects = (fromIndex >= 0 && fromIndex < this.state.steps.length)
+        ? JSON.parse(JSON.stringify(this.state.steps[fromIndex].objects))
+        : JSON.parse(JSON.stringify(this.state.objects));
 
       this.tweening = true;
       this.state.isTweening = true;
       this.tweenStartTime = performance.now();
-      this.fromStep = JSON.parse(JSON.stringify(this.state.objects));
+      this.fromStep = fromObjects;
       this.toStep = JSON.parse(JSON.stringify(this.state.steps[index].objects));
       this.state.currentStepIndex = index;
       this.animateTween();
